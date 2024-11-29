@@ -207,7 +207,10 @@
   (atom {}))
 
 (defn ^:no-doc -check-vega-cli-installed? [mode]
-  (= 0 (:exit (shell/sh "which" (case mode :vega-lite "vl2svg" :vega "vg2svg")))))
+    (let [os (System/getProperty "os.name")
+        command (if (string/includes? (string/lower-case os) "windows") "where" "which")]
+    (= 0 (:exit (shell/sh command (case mode :vega-lite "vl2svg" :vega "vg2svg"))))))
+
 
 (defn- vega-cli-installed? [mode]
   ;; First checks the installed-clis cache, then epirically checks via cli call
@@ -394,6 +397,14 @@
   (with-open [out (io/output-stream file)]
     (.write out bytes)))
 
+(defn- shell-out
+  "Helps shell on windows"
+  [command scale in out]
+  (let [os (System/getProperty "os.name")]
+    (if (string/includes? (string/lower-case os) "windows")
+      (shell/sh "cmd" "/c" command (str "-s" scale) in out)
+      (shell/sh command (str "-s" scale) in out))))
+
 (defn vega-cli
   "Takes either doc or the contents of input-filename, and uses the vega/vega-lite cli tools to translate to the specified format.
   If both doc and input-filename are present, writes doc to input-filename for running cli tool (otherwise, a tmp file is used).
@@ -413,7 +424,7 @@
              ;; Write out the vega-doc file, and run the vega(-lite) cli command
              _ (when vega-doc
                  (spit input-filename (json/encode vega-doc)))
-             {:keys [out exit err]} (shell/sh command (str "-s" scale) input-filename output-filename)]
+             {:keys [out exit err]} (shell-out command (str "-s" scale) input-filename output-filename)]
          (log/info "input:" input-filename)
          (log/info "output:" output-filename)
          (if (= exit 0)
